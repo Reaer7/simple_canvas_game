@@ -3,26 +3,28 @@ package com.gmail.reater.last;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Random;
 
 public class Game extends Canvas implements Runnable {
-    public static final int WINDOW_WIDTH = 800;
-    public static final int WINDOW_HEIGHT = 600;
-    public static final String WINDOW_TITLE = "TUTORIAL 1";
+    private static final int WINDOW_WIDTH = 800;
+    private static final int WINDOW_HEIGHT = 600;
+    private static final int BUBBLE_DIAMETER = 80;
+    private static final String WINDOW_TITLE = "TUTORIAL 1";
+    private static final Color[] COLORS = {Color.RED, Color.PINK, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.CYAN, Color.BLUE, Color.MAGENTA};
+    private static final Random random = new Random();
 
-    private boolean leftPressed = false;
-    private boolean rightPressed = false;
-    private boolean downPressed = false;
-    private boolean upPressed = false;
     private boolean running;
     private Sprite hero;
-    private int x = 0;
-    private int y = 0;
+    private int xHeroCoordination;
+    private int yHeroCoordination;
+    private boolean isPopped;
+    private int xBubbleCoordination;
+    private int yBubbleCoordination;
+    private int count;
 
     public static void main(String[] args) {
         Game game = new Game();
@@ -42,106 +44,104 @@ public class Game extends Canvas implements Runnable {
         new Thread(this).start();
     }
 
+    @Override
     public void run() {
         long lastTime = System.currentTimeMillis();
         long delta;
 
-        init();
+        KeyInputHandler keyInputHandler = init();
 
         while (running) {
             delta = System.currentTimeMillis() - lastTime;
             lastTime = System.currentTimeMillis();
             render();
-            update(delta);
+            update(delta, keyInputHandler);
         }
     }
 
-    public void init() {
-        addKeyListener(new KeyInputHandler());
+    public KeyInputHandler init() {
+        KeyInputHandler keyInputHandler = new KeyInputHandler();
+        addKeyListener(keyInputHandler);
         hero = getSprite("person.png");
+        return keyInputHandler;
     }
 
     public void render() {
-        BufferStrategy bs = getBufferStrategy();
-        if (bs == null) {
+        BufferStrategy bufferStrategy = getBufferStrategy();
+        if (bufferStrategy == null) {
             createBufferStrategy(2);
             requestFocus();
+            isPopped = true;
             return;
         }
 
-        Graphics g = bs.getDrawGraphics();
-        g.setColor(Color.black);
-        g.fillRect(0, 0, getWidth(), getHeight());
-        hero.draw(g, x, y);
-        g.dispose();
-        bs.show();
+        Graphics heroGraphics = bufferStrategy.getDrawGraphics();
+        heroGraphics.setColor(Color.black);
+        heroGraphics.fillRect(0, 0, getWidth(), getHeight());
+        hero.draw(heroGraphics, xHeroCoordination, yHeroCoordination);
+        heroGraphics.dispose();
+
+        Graphics bubbleGraphics = bufferStrategy.getDrawGraphics();
+        Color color = COLORS[count % COLORS.length];
+        if (isPopped) {
+            xBubbleCoordination = random.nextInt(WINDOW_WIDTH - BUBBLE_DIAMETER);
+            yBubbleCoordination = random.nextInt(WINDOW_HEIGHT - BUBBLE_DIAMETER);
+            isPopped = false;
+        }
+        bubbleGraphics.setColor(color);
+        bubbleGraphics.fillOval(xBubbleCoordination, yBubbleCoordination, BUBBLE_DIAMETER, BUBBLE_DIAMETER);
+        bubbleGraphics.dispose();
+
+        Graphics textGraphics = bufferStrategy.getDrawGraphics();
+        textGraphics.setColor(Color.WHITE);
+        String message = "Count = " + count;
+        textGraphics.drawString(message,
+                WINDOW_WIDTH - message.length() * 8,
+                WINDOW_HEIGHT - message.length() * 2
+        );
+        textGraphics.dispose();
+
+        bufferStrategy.show();
     }
 
-    public void update(long delta) {
-        if (leftPressed && x > 0) {
-            x -= delta;
+    public void update(long delta, KeyInputHandler keyInputHandler) {
+        if (keyInputHandler.isLeftPressed() && xHeroCoordination > 0) {
+            xHeroCoordination -= delta;
         }
-        if (rightPressed && x < WINDOW_WIDTH - hero.getWidth()) {
-            x += delta;
+        if (keyInputHandler.isRightPressed() && xHeroCoordination < WINDOW_WIDTH - hero.getWidth()) {
+            xHeroCoordination += delta;
         }
-        if (upPressed && y > 0) {
-            y -= delta;
+        if (keyInputHandler.isUpPressed() && yHeroCoordination > 0) {
+            yHeroCoordination -= delta;
         }
-        if (downPressed && y < WINDOW_HEIGHT - hero.getHeight()) {
-            y += delta;
+        if (keyInputHandler.isDownPressed() && yHeroCoordination < WINDOW_HEIGHT - hero.getHeight()) {
+            yHeroCoordination += delta;
+        }
+
+        if (xHeroCoordination + hero.getWidth() / 2 >= xBubbleCoordination &&
+                xHeroCoordination + hero.getWidth() / 2 <= xBubbleCoordination + BUBBLE_DIAMETER &&
+                yHeroCoordination + hero.getHeight() / 2 >= yBubbleCoordination &&
+                yHeroCoordination + hero.getHeight() / 2 <= yBubbleCoordination + BUBBLE_DIAMETER
+        ) {
+            isPopped = true;
+            count++;
         }
     }
 
     public Sprite getSprite(String path) {
-        BufferedImage sourceImage = null;
-
         try {
             URL url = this.getClass()
                     .getClassLoader()
                     .getResource(path);
             if (url != null) {
-                sourceImage = ImageIO.read(url);
+                BufferedImage sourceImage = ImageIO.read(url);
+                return new Sprite(Toolkit.getDefaultToolkit()
+                        .createImage(sourceImage.getSource())
+                );
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        return new Sprite(Toolkit.getDefaultToolkit()
-                .createImage(sourceImage.getSource())
-        );
-    }
-
-    private class KeyInputHandler extends KeyAdapter {
-        @Override
-        public void keyPressed(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-                leftPressed = true;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-                rightPressed = true;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_DOWN) {
-                downPressed = true;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_UP) {
-                upPressed = true;
-            }
-        }
-
-        @Override
-        public void keyReleased(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-                leftPressed = false;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-                rightPressed = false;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_DOWN) {
-                downPressed = false;
-            }
-            if (e.getKeyCode() == KeyEvent.VK_UP) {
-                upPressed = false;
-            }
-        }
+        return null;
     }
 }
